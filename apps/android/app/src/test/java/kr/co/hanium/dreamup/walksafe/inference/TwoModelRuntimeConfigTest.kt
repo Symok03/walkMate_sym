@@ -34,15 +34,15 @@ class TwoModelRuntimeConfigTest {
         val json = File("src/main/assets/model-config/two_model_runtime.json").readText()
         val config = TwoModelRuntimeConfig.parse(json)
 
-        assertEquals("walksafe-android-runtime-walkmate21-yolo11n-768-fp32-normalized-bilinear-20260913", config.bundleVersion)
+        assertEquals("walksafe-android-runtime-walkmate21-yolo26n-person-aux-half-rate-20261010", config.bundleVersion)
         assertEquals(TwoModelRuntimeConfig.UNIFIED_MODEL_KEY, config.primaryModelKey)
         assertNull(config.fallbackModelKey)
-        assertEquals("models/walkmate_yolo11n_21cls_768_float32.tflite", config.unifiedWalksafe?.asset)
+        assertEquals("models/walkmate_yolo26n_21cls_768_float32.tflite", config.unifiedWalksafe?.asset)
         assertEquals(768, config.unifiedWalksafe?.inputSize)
-        assertEquals("d10aa174a2ceb8ae116a09b7b570e27ff71c296fbd98f240c11e69dbdb434b57", config.unifiedWalksafe?.artifactSha256)
-        assertEquals("6f8ae9d2bb82f91e4391e42957a1b374bd4b14efa4702a86f7283454bc38cee0", config.unifiedWalksafe?.sourceModelSha256)
+        assertEquals("75d66fe4cafc7fa57bcfbc86cad0e005042aa926105774079b0f5a8190a9e04b", config.unifiedWalksafe?.artifactSha256)
+        assertEquals("026e4d36f7cc62c302e0841dec1fbc85c7cabd29fe729fb82625477a4aa70319", config.unifiedWalksafe?.sourceModelSha256)
         assertEquals(
-            "model/artifacts/candidates/walkmate_21cls_yolo11n_img768_20260912/best.pt",
+            "model/artifacts/candidates/walkmate_21cls_yolo26n_img768_20260927/best.pt",
             config.unifiedWalksafe?.sourceModel,
         )
         val unifiedRuntime = requireNotNull(config.unifiedWalksafe).runtime
@@ -52,8 +52,8 @@ class TwoModelRuntimeConfigTest {
         assertEquals(false, unifiedRuntime.gpuPrecisionLossAllowed)
         assertTrue(unifiedRuntime.gpuSerializationCacheEnabled)
         assertEquals(true, config.unifiedWalksafe?.enabled)
-        assertEquals(YoloOutputFormat.RAW_XYWH_NORMALIZED, config.unifiedWalksafe?.outputFormat)
-        org.junit.Assert.assertArrayEquals(intArrayOf(1, 25, 12096), requireNotNull(config.unifiedWalksafe).outputTensorShape())
+        assertEquals(YoloOutputFormat.END_TO_END_XYXY, config.unifiedWalksafe?.outputFormat)
+        org.junit.Assert.assertArrayEquals(intArrayOf(1, 300, 6), requireNotNull(config.unifiedWalksafe).outputTensorShape())
         assertEquals(21, config.unifiedWalksafe?.classes?.size)
         assertEquals("linear_tactile_paving", config.unifiedWalksafe?.classNameForId(0))
         assertEquals("damaged_linear_tactile_paving", config.unifiedWalksafe?.classNameForId(1))
@@ -111,6 +111,19 @@ class TwoModelRuntimeConfigTest {
             requireNotNull(config.thresholdForReportClass(TwoModelRuntimeConfig.UNIFIED_MODEL_KEY, "damaged_linear_tactile_paving")),
             0.0001f,
         )
+
+        val personAuxiliary = requireNotNull(config.personAuxiliary)
+        assertEquals("models/person_yolo26n_coco_640_float32.tflite", personAuxiliary.asset)
+        assertEquals("64e9694cf07e44330de8f5a300d442c49e5703d68bd9f5e2bf905b1d7a8ceab0", personAuxiliary.artifactSha256)
+        assertEquals("9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef", personAuxiliary.sourceModelSha256)
+        assertEquals(640, personAuxiliary.inputSize)
+        assertEquals(2, personAuxiliary.inferenceIntervalFrames)
+        assertEquals(TwoModelClassMap.cocoClasses, personAuxiliary.classes)
+        assertEquals(setOf("person"), personAuxiliary.allowlist)
+        assertEquals(0.25f, personAuxiliary.thresholdForClass("person"), 0.0001f)
+        assertEquals(1.0f, personAuxiliary.thresholdForClass("bicycle"), 0.0001f)
+        assertEquals(YoloOutputFormat.END_TO_END_XYXY, personAuxiliary.outputFormat)
+        assertEquals("cpu", personAuxiliary.runtime.delegate)
 
         val customTactile = requireNotNull(config.customTactile)
         assertEquals("models/custom_tactile_yolo26s_float32.tflite", customTactile.asset)
@@ -197,7 +210,7 @@ class TwoModelRuntimeConfigTest {
         val json = File("src/main/assets/model-config/two_model_runtime.json").readText()
             .replace("\"fallback_model\": null", "\"fallback_model\": \"legacy_two_model\"")
             .replace(
-                "      \"artifact_sha256\": \"3336a4411eda461a3159cca80c046d52a5dadfd6a91f3831490bb5574a160780\",\n",
+                Regex("""\s*"artifact_sha256"\s*:\s*"3336a4411eda461a3159cca80c046d52a5dadfd6a91f3831490bb5574a160780"\s*,?"""),
                 "",
             )
 
@@ -212,15 +225,15 @@ class TwoModelRuntimeConfigTest {
         listOf(
             json.replace(Regex("\\s*\\\"version\\\"\\s*:\\s*\\\"[^\\\"]+\\\",?"), ""),
             json.replace(
-                "\"version\": \"walksafe-android-runtime-walkmate21-yolo11n-768-fp32-normalized-bilinear-20260913\"",
+                "\"version\": \"walksafe-android-runtime-walkmate21-yolo26n-person-aux-half-rate-20261010\"",
                 "\"version\": 1",
             ),
             json.replace(
-                "walksafe-android-runtime-walkmate21-yolo11n-768-fp32-normalized-bilinear-20260913",
+                "walksafe-android-runtime-walkmate21-yolo26n-person-aux-half-rate-20261010",
                 " ",
             ),
             json.replace(
-                "walksafe-android-runtime-walkmate21-yolo11n-768-fp32-normalized-bilinear-20260913",
+                "walksafe-android-runtime-walkmate21-yolo26n-person-aux-half-rate-20261010",
                 " version-with-space ",
             ),
         ).forEach { invalid ->

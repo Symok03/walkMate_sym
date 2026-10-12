@@ -17,10 +17,11 @@ data class TwoModelRuntimeConfig(
     val unifiedWalksafe: ModelRuntimeConfig?,
     val customTactile: ModelRuntimeConfig?,
     val cocoGeneral: ModelRuntimeConfig?,
+    val personAuxiliary: ModelRuntimeConfig? = null,
 ) {
     // Legacy pair loading can create its models even when their enabled flags are false.
     internal val requiresGpuThreadOwner: Boolean
-        get() = listOfNotNull(unifiedWalksafe, customTactile, cocoGeneral)
+        get() = listOfNotNull(unifiedWalksafe, customTactile, cocoGeneral, personAuxiliary)
             .any { it.runtime.delegate == "gpu" }
 
     /** Report identity preserves raw WalkMate class IDs while runtime selection keeps its logical key. */
@@ -62,6 +63,7 @@ data class TwoModelRuntimeConfig(
         private const val CONFIG_ASSET = "model-config/two_model_runtime.json"
         const val LEGACY_TWO_MODEL_KEY = "legacy_two_model"
         const val UNIFIED_MODEL_KEY = "unified_walksafe"
+        const val PERSON_AUXILIARY_MODEL_KEY = "person_auxiliary"
         const val WALKMATE_REPORT_MODEL_KEY = "walkmate_21cls"
 
         fun load(context: Context): TwoModelRuntimeConfig {
@@ -70,7 +72,10 @@ data class TwoModelRuntimeConfig(
             val unified = config.unifiedWalksafe?.let { model ->
                 if (!model.enabled || assetMatches(context, model)) model else model.copy(enabled = false)
             }
-            return config.copy(unifiedWalksafe = unified)
+            val personAuxiliary = config.personAuxiliary?.let { model ->
+                if (!model.enabled || assetMatches(context, model)) model else model.copy(enabled = false)
+            }
+            return config.copy(unifiedWalksafe = unified, personAuxiliary = personAuxiliary)
         }
 
         fun parse(json: String): TwoModelRuntimeConfig {
@@ -100,6 +105,8 @@ data class TwoModelRuntimeConfig(
                 ?.let { parseModel("custom_tactile", it, allowlistRequired = false) }
             val cocoGeneral = models.optJSONObject("coco_general")
                 ?.let { parseModel("coco_general", it, allowlistRequired = true) }
+            val personAuxiliary = models.optJSONObject(PERSON_AUXILIARY_MODEL_KEY)
+                ?.let { parseModel(PERSON_AUXILIARY_MODEL_KEY, it, allowlistRequired = true) }
             if (primaryModelKey == LEGACY_TWO_MODEL_KEY || fallbackModelKey == LEGACY_TWO_MODEL_KEY) {
                 require(customTactile != null) { "custom_tactile model config is required for legacy two-model runtime" }
                 require(cocoGeneral != null) { "coco_general model config is required for legacy two-model runtime" }
@@ -117,6 +124,7 @@ data class TwoModelRuntimeConfig(
                 unifiedWalksafe = unifiedWalksafe,
                 customTactile = customTactile,
                 cocoGeneral = cocoGeneral,
+                personAuxiliary = personAuxiliary,
             )
         }
 
@@ -125,6 +133,7 @@ data class TwoModelRuntimeConfig(
             val allowlist = json.optJSONArray("allowlist").toStringSet()
             val thresholds = json.getJSONObject("thresholds").toFloatMap()
             val inputSize = json.getInt("input_size")
+            val inferenceIntervalFrames = json.optInt("inference_interval_frames", 1)
             val asset = json.getString("asset")
             val sourceModel = json.optString("source_model").ifBlank { null }
             val artifactSha256 = json.optString("artifact_sha256").ifBlank { null }
@@ -133,6 +142,14 @@ data class TwoModelRuntimeConfig(
             val outputFormat = YoloOutputFormat.fromConfig(json.optString("output_format", YoloOutputFormat.END_TO_END_XYXY.configValue))
             if (modelKey == UNIFIED_MODEL_KEY && outputFormat.isRaw) {
                 require(classes == TwoModelClassMap.unifiedWalksafeClasses) { "WalkMate class order must match the exported checkpoint" }
+            }
+            if (modelKey == PERSON_AUXILIARY_MODEL_KEY) {
+                require(classes == TwoModelClassMap.cocoClasses) {
+                    "person auxiliary class order must match the COCO checkpoint"
+                }
+                require(allowlist == setOf("person")) {
+                    "person auxiliary allowlist must contain only COCO class 0 (person)"
+                }
             }
             val maxDetections = if (json.has("max_detections")) {
                 val value = json.get("max_detections")
@@ -143,6 +160,9 @@ data class TwoModelRuntimeConfig(
             } else 300
             require(asset.startsWith("models/") && ".." !in asset) { "asset must be a relative models/ path" }
             require(inputSize > 0) { "input_size must be positive" }
+            require(inferenceIntervalFrames in 1..60) {
+                "inference_interval_frames must be between 1 and 60"
+            }
             require(classes.isNotEmpty()) { "classes must not be empty" }
             require(classes.size == classes.toSet().size) { "classes must not contain duplicates" }
             require(thresholds.values.all { it in 0f..1f }) { "thresholds must be between 0 and 1" }
@@ -152,13 +172,13 @@ data class TwoModelRuntimeConfig(
                     "allowlist must be a subset of classes"
                 }
             }
-            if (modelKey == UNIFIED_MODEL_KEY && enabled) {
-                require(sourceModel != null) { "unified_walksafe source_model is required" }
+            if (modelKey in setOf(UNIFIED_MODEL_KEY, PERSON_AUXILIARY_MODEL_KEY) && enabled) {
+                require(sourceModel != null) { "$modelKey source_model is required" }
                 require(artifactSha256?.matches(SHA256_PATTERN) == true) {
-                    "unified_walksafe artifact_sha256 must be 64 lowercase hex characters"
+                    "$modelKey artifact_sha256 must be 64 lowercase hex characters"
                 }
                 require(sourceModelSha256?.matches(SHA256_PATTERN) == true) {
-                    "unified_walksafe source_model_sha256 must be 64 lowercase hex characters"
+                    "$modelKey source_model_sha256 must be 64 lowercase hex characters"
                 }
             }
             return ModelRuntimeConfig(
@@ -176,6 +196,7 @@ data class TwoModelRuntimeConfig(
                 nmsIouThreshold = json.optDouble("nms_iou_threshold", 0.7).toFloat(),
                 maxDetections = maxDetections,
                 enabled = enabled,
+                inferenceIntervalFrames = inferenceIntervalFrames,
             )
         }
 
@@ -274,10 +295,14 @@ data class ModelRuntimeConfig(
     val outputFormat: YoloOutputFormat = YoloOutputFormat.END_TO_END_XYXY,
     val nmsIouThreshold: Float = 0.7f,
     val maxDetections: Int = 300,
+    val inferenceIntervalFrames: Int = 1,
 ) {
     init {
         require(nmsIouThreshold.isFinite() && nmsIouThreshold in 0f..1f) { "nms_iou_threshold must be between 0 and 1" }
         require(maxDetections in 1..300) { "max_detections must be between 1 and 300" }
+        require(inferenceIntervalFrames in 1..60) {
+            "inference_interval_frames must be between 1 and 60"
+        }
         if (outputFormat.isRaw) {
             require(inputSize in 32..2048 && inputSize % 32 == 0) { "raw YOLO input size must be a multiple of 32" }
         }

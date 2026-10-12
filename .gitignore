@@ -3,6 +3,7 @@
 .venv-tests/
 .venv-backup-tests/
 .gradle/
+.gradle-user-home/
 .kotlin/
 .cxx/
 .externalNativeBuild/
@@ -110,10 +111,16 @@ model/artifacts/candidates/
 !model/artifacts/candidates/
 !model/artifacts/candidates/walksafe_13cls_yolo26n_img768_20260708/
 !model/artifacts/candidates/walksafe_13cls_yolo26n_img768_20260708/walksafe_13cls_yolo26n_img768_best_epoch270.pt
+!model/artifacts/candidates/walkmate_21cls_yolo26n_img768_20260927/
+!model/artifacts/candidates/walkmate_21cls_yolo26n_img768_20260927/README.md
+!model/artifacts/candidates/person_yolo26n_coco_640_20260826/
+!model/artifacts/candidates/person_yolo26n_coco_640_20260826/README.md
 !apps/android/app/src/main/assets/models/coco_yolo26n_float32.tflite
 !apps/android/app/src/main/assets/models/custom_tactile_yolo26s_float32.tflite
 !apps/android/app/src/main/assets/models/walksafe_unified_yolo26n_768_float32.tflite
 !apps/android/app/src/main/assets/models/walkmate_yolo11n_21cls_768_float32.tflite
+!apps/android/app/src/main/assets/models/walkmate_yolo26n_21cls_768_float32.tflite
+!apps/android/app/src/main/assets/models/person_yolo26n_coco_640_float32.tflite
 !apps/android/app/src/main/assets/models/fastsam_s_768_float32.tflite
 !apps/android/app/src/main/assets/models/walksafe_unified_yolo26n_768_float32_gpu_compatible.tflite
 

@@ -27,10 +27,13 @@ class TfliteAndroidFrameDetector private constructor(
     private val customDetector: TfliteSingleModelDetector? = null,
     private val cocoDetector: TfliteSingleModelDetector? = null,
     private val unifiedDetector: TfliteSingleModelDetector? = null,
+    private val personDetector: TfliteSingleModelDetector? = null,
+    personInferenceIntervalFrames: Int = 1,
     private val preprocessor: YuvImagePreprocessor = YuvImagePreprocessor(),
     private val preprocessingStrategy: YuvPreprocessingStrategy = YuvPreprocessingStrategy.LEGACY_TWO_PASS,
 ) : AndroidFrameDetector, Closeable {
     private val runtimeLock = Any()
+    private val personInferenceGate = InferenceFrameIntervalGate(personInferenceIntervalFrames)
     private var closed = false
 
     override fun detect(
@@ -133,17 +136,32 @@ class TfliteAndroidFrameDetector private constructor(
         val input = preprocessor.preprocessBilinear(image, detector.inputSize)
         val preprocessMs = elapsedMs(inputStartedNs)
         val result = detector.detect(input)
+        val person = personDetector?.takeIf { personInferenceGate.shouldRun() }
+        val personInputStartedNs = System.nanoTime()
+        val personInput = person?.let { preprocessor.preprocessBilinear(image, it.inputSize) }
+        val personPreprocessMs = personInput?.let { elapsedMs(personInputStartedNs) }
+        val personResult = if (person != null && personInput != null) person.detect(personInput) else null
+        val primaryDetections = result.detections.map {
+            it.copy(bboxNorm = UprightCameraImage.toSensor(it.bboxNorm, quarterTurns))
+        }
+        val personDetections = personResult?.detections.orEmpty().map {
+            it.copy(bboxNorm = UprightCameraImage.toSensor(it.bboxNorm, quarterTurns))
+        }
         return AndroidDetectionResult(
-            detections = result.detections.map { it.copy(bboxNorm = UprightCameraImage.toSensor(it.bboxNorm, quarterTurns)) },
+            detections = PersonDetectionFusion.merge(primaryDetections, personDetections),
             timing = AndroidDetectorTiming(
                 yuvDecodeMs = yuvDecodeMs,
                 modelKey = UNIFIED_MODEL_KEY,
                 modelPreprocessMs = preprocessMs,
                 modelInferenceMs = result.inferenceMs,
                 modelParseMs = result.parseMs,
+                personPreprocessMs = personPreprocessMs,
+                personInferenceMs = personResult?.inferenceMs,
+                personParseMs = personResult?.parseMs,
                 totalMs = elapsedMs(totalStartedNs),
-                completedModels = listOf(UNIFIED_MODEL_KEY),
+                completedModels = listOfNotNull(UNIFIED_MODEL_KEY, personResult?.let { PERSON_AUXILIARY_MODEL_KEY }),
                 modelRuntime = result.runtime,
+                personRuntime = personResult?.runtime,
                 preprocessingStrategy = "UPRIGHT_RGB_BILINEAR",
             ),
         )
@@ -188,7 +206,7 @@ class TfliteAndroidFrameDetector private constructor(
 
     private fun closeModels() {
         var failure: Throwable? = null
-        listOfNotNull(customDetector, cocoDetector, unifiedDetector).forEach { detector ->
+        listOfNotNull(customDetector, cocoDetector, unifiedDetector, personDetector).forEach { detector ->
             try {
                 detector.close()
             } catch (error: Throwable) {
@@ -288,7 +306,12 @@ class TfliteAndroidFrameDetector private constructor(
                 "overlap experiment requires an enabled unified primary model; legacy is not supported"
             }
             require(TwoModelRuntimeConfig.assetMatches(context, unified)) { "unified model asset hash mismatch" }
-            val unifiedOnly = config.copy(fallbackModelKey = null, customTactile = null, cocoGeneral = null)
+            val unifiedOnly = config.copy(
+                fallbackModelKey = null,
+                customTactile = null,
+                cocoGeneral = null,
+                personAuxiliary = null,
+            )
             val load = createWithStatus(context, unifiedOnly, runtimeOverride, preprocessingStrategy)
             val detector = checkNotNull(load.detector) { "unified overlap model unavailable: ${load.reason}" }
             return try {
@@ -420,11 +443,32 @@ class TfliteAndroidFrameDetector private constructor(
             }
             return loadModelOrNull {
                 require(TwoModelRuntimeConfig.assetMatches(context, unifiedConfig)) { "unified model asset hash mismatch" }
-                TfliteAndroidFrameDetector(
-                    threadOwner = owner,
-                    unifiedDetector = createSingleModelDetector(context, unifiedConfig),
-                    preprocessingStrategy = preprocessingStrategy,
-                )
+                val unified = createSingleModelDetector(context, unifiedConfig)
+                var person: TfliteSingleModelDetector? = null
+                try {
+                    person = config.personAuxiliary
+                        ?.takeIf { it.enabled && TwoModelRuntimeConfig.assetMatches(context, it) }
+                        ?.let { personConfig -> loadModelOrNull { createSingleModelDetector(context, personConfig) } }
+                    TfliteAndroidFrameDetector(
+                        threadOwner = owner,
+                        unifiedDetector = unified,
+                        personDetector = person,
+                        personInferenceIntervalFrames = config.personAuxiliary?.inferenceIntervalFrames ?: 1,
+                        preprocessingStrategy = preprocessingStrategy,
+                    )
+                } catch (error: Throwable) {
+                    try {
+                        person?.close()
+                    } catch (closeError: Throwable) {
+                        error.addSuppressed(closeError)
+                    }
+                    try {
+                        unified.close()
+                    } catch (closeError: Throwable) {
+                        error.addSuppressed(closeError)
+                    }
+                    throw error
+                }
             }
         }
 
@@ -538,6 +582,7 @@ class TfliteAndroidFrameDetector private constructor(
         private const val COCO_MODEL_KEY = "coco_general"
         private const val CUSTOM_MODEL_KEY = "custom_tactile"
         private const val UNIFIED_MODEL_KEY = "unified_walksafe"
+        private const val PERSON_AUXILIARY_MODEL_KEY = "person_auxiliary"
     }
 }
 

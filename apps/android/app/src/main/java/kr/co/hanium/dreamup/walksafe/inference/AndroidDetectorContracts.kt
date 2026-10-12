@@ -49,6 +49,9 @@ data class AndroidDetectorTiming(
     val modelPreprocessMs: Long? = null,
     val modelInferenceMs: Long? = null,
     val modelParseMs: Long? = null,
+    val personPreprocessMs: Long? = null,
+    val personInferenceMs: Long? = null,
+    val personParseMs: Long? = null,
     val cocoPreprocessMs: Long? = null,
     val cocoInferenceMs: Long? = null,
     val cocoParseMs: Long? = null,
@@ -59,6 +62,7 @@ data class AndroidDetectorTiming(
     val completedModels: List<String> = emptyList(),
     val skippedModels: List<String> = emptyList(),
     val modelRuntime: AndroidDetectorRuntime? = null,
+    val personRuntime: AndroidDetectorRuntime? = null,
     val cocoRuntime: AndroidDetectorRuntime? = null,
     val customRuntime: AndroidDetectorRuntime? = null,
     val preprocessingStrategy: String? = null,
@@ -84,6 +88,9 @@ fun AndroidDetectorTiming.totalModelMs(): Long? {
         modelPreprocessMs,
         modelInferenceMs,
         modelParseMs,
+        personPreprocessMs,
+        personInferenceMs,
+        personParseMs,
     )
     if (genericValues.isNotEmpty()) return genericValues.sum()
 

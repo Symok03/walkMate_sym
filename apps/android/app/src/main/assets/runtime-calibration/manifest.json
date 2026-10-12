@@ -1,5 +1,5 @@
 {
-  "version": "walksafe-runtime-calibration-walkmate21-v2",
+  "version": "walksafe-runtime-calibration-walkmate21-yolo26n-v3",
   "model_input_size": 768,
   "attribution_asset": "ATTRIBUTION.md",
   "fixtures": [
@@ -305,7 +305,7 @@
       "coco_885",
       "coco_11149"
     ],
-    "near_threshold_limitations": "Candidate images only, NOT_VERIFIED for WalkMate YOLO11n. At runtime the current baseline must produce at least one allowed maximum-class score with a finite valid box within +/- 0.02 of that class threshold on a declared candidate image; otherwise calibration remains INCONCLUSIVE. This operational coverage definition is not accuracy evidence. All raw values, class threshold membership and parsed detections must also agree between runtimes.",
+    "near_threshold_limitations": "Candidate images only, NOT_VERIFIED for WalkMate YOLO26n. At runtime the current baseline must produce at least one allowed maximum-class score with a finite valid box within +/- 0.02 of that class threshold on a declared candidate image; otherwise calibration remains INCONCLUSIVE. This operational coverage definition is not accuracy evidence. All raw values, class threshold membership and parsed detections must also agree between runtimes.",
     "near_threshold_observation_required_at_runtime": true,
     "near_threshold_window": 0.02
   },
@@ -322,5 +322,5 @@
     "changes": "Selected 14 annotations; field names adapted and class IDs remapped by semantic name to the WalkMate 21-class model. Source bbox/area/crowd values and JPEG bytes retained; normalized coordinates are computed only by the loader.",
     "notice": "Provided as is without warranties; no endorsement by the COCO Consortium is implied."
   },
-  "model_source_sha256": "6f8ae9d2bb82f91e4391e42957a1b374bd4b14efa4702a86f7283454bc38cee0"
+  "model_source_sha256": "026e4d36f7cc62c302e0841dec1fbc85c7cabd29fe729fb82625477a4aa70319"
 }

@@ -1777,6 +1777,9 @@ class MainActivity : Activity(), GLSurfaceView.Renderer {
         get() = BuildConfig.DEBUG && BuildConfig.DEVELOPMENT_QUICK_START
     private val developmentPostLoginDeviceCheckBypassed: Boolean
         get() = BuildConfig.DEBUG && !BuildConfig.WALKSAFE_POST_LOGIN_DEVICE_CHECK_REQUIRED
+    private val developmentOnboardingBypassEnabled: Boolean
+        get() = BuildConfig.DEBUG && BuildConfig.DEVELOPMENT_OFFLINE_LOGIN &&
+            BuildConfig.DEVELOPMENT_ONBOARDING_BYPASS
     private val developmentGuidanceStartBypassEnabled: Boolean
         get() = BuildConfig.DEBUG && BuildConfig.WALKSAFE_DEBUG_GUIDANCE_START_BYPASS &&
             (developmentGuidanceStartRequested || shouldShowNativeHome())
@@ -7842,6 +7845,10 @@ class MainActivity : Activity(), GLSurfaceView.Renderer {
                 accountPasswordInput,
                 "비밀번호는 10자 이상 128자 이하로 입력하세요.",
             )
+            return
+        }
+        if (BuildConfig.DEBUG && BuildConfig.DEVELOPMENT_OFFLINE_LOGIN) {
+            loginDevelopmentOfflineAccount(email, password)
             return
         }
         if (!accountNetworkAvailable() || gatewayFieldSession != null) {
@@ -17350,6 +17357,61 @@ class MainActivity : Activity(), GLSurfaceView.Renderer {
         )
     }
 
+    private fun loginDevelopmentOfflineAccount(email: String, password: String) {
+        if (email != DEVELOPMENT_OFFLINE_EMAIL || password != DEVELOPMENT_OFFLINE_PASSWORD) {
+            showAccountInputError(accountPasswordInput, "이메일 또는 비밀번호를 확인하세요.")
+            return
+        }
+        val gatewayOrigin = configuredGatewayOriginOrNull() ?: run {
+            showAccountMessage("게이트웨이 주소를 확인할 수 없습니다.")
+            return
+        }
+        if (gatewayFieldSession != null) clearGatewaySession(logoutRemote = false)
+        val operation = GatewaySessionProcessCoordinator.beginOperation() ?: run {
+            showAccountMessage("다른 로그인 처리가 진행 중입니다. 잠시 후 다시 시도하세요.")
+            return
+        }
+        val actorId = DEVELOPMENT_OFFLINE_ACTOR_ID
+        val initial = FirstRunOnboardingPolicy.initialEmailAccount(epoch = nextFirstRunEpoch())
+        val actorBinding = FirstRunOpaqueActorBinding.fromProvider(actorId)
+        val receipt = FirstRunReceiptHash.fromSha256Hex(
+            sha256Hex("offline-debug-session-v1|$actorId|${initial.epoch}".toByteArray(Charsets.UTF_8)),
+        )
+        val transition = FirstRunOnboardingPolicy.recordVerifiedEmailLogin(
+            snapshot = initial,
+            actorBinding = actorBinding,
+            receiptHash = receipt,
+        )
+        if (!transition.accepted) {
+            GatewaySessionProcessCoordinator.clear(operation)
+            showAccountMessage("로그인 단계가 변경되어 결과를 적용하지 않았습니다.")
+            return
+        }
+        val session = GatewayFieldSession.legacyVerified(
+            gatewayBaseUrl = gatewayOrigin,
+            actorId = actorId,
+            deviceId = "local-debug-device",
+            cookiePair = "${GatewayFieldSession.COOKIE_NAME}=local-debug-session-token",
+            expiresAtEpochMs = System.currentTimeMillis() + 12L * 60L * 60L * 1_000L,
+        )
+        if (!GatewaySessionProcessCoordinator.publishVerified(operation, session, transition.current)) {
+            session.invalidate()
+            showAccountMessage("로그인 세션을 안전하게 연결하지 못했습니다.")
+            return
+        }
+        backendDeviceRestorePending = false
+        firstRunOnboardingSnapshot = transition.current
+        reporterUserId = actorId
+        priorityUserOnboardingActorId = actorId
+        priorityUserOnboardingPolicy = PriorityUserOnboardingPolicy(
+            PriorityUserOnboardingSnapshot(ageBand = PriorityUserAgeBand.VERIFIED_14_PLUS),
+        )
+        permissionSessionPolicy.rememberActor(actorId)
+        showAccountMessage("로그인했습니다. 먼저 서비스 목적과 안전 한계를 확인하세요.")
+        updateNavigationStatus("account=offline_debug_authenticated next=purpose_and_safety")
+        updateFirstRunOnboardingUi()
+    }
+
     private fun startDevelopmentQuickStart() {
         if (!developmentQuickStartEnabled || !isActivityForeground) return
         if (walkSessionLifecycle.snapshot().state == WalkSessionState.PAUSED) {
@@ -20291,6 +20353,7 @@ class MainActivity : Activity(), GLSurfaceView.Renderer {
             }
         }
         bindFirstRunVerifiedActorForTraining()
+        applyDevelopmentOnboardingBypassIfEnabled()
         val firstRunActorId = firstRunOnboardingSnapshot.verifiedActorBinding?.value
         if (
             firstRunActorId != null &&
@@ -20321,6 +20384,32 @@ class MainActivity : Activity(), GLSurfaceView.Renderer {
         if (!isScreenReaderActive()) {
             speakInteraction(effectiveAnnouncement)
         }
+    }
+
+    private fun applyDevelopmentOnboardingBypassIfEnabled() {
+        if (!developmentOnboardingBypassEnabled ||
+            firstRunOnboardingSnapshot.stage != FirstRunOnboardingStage.FP004_TRAINING ||
+            firstRunOnboardingSnapshot.verifiedActorBinding?.value != DEVELOPMENT_OFFLINE_ACTOR_ID ||
+            reporterUserId != DEVELOPMENT_OFFLINE_ACTOR_ID ||
+            priorityUserOnboardingActorId != DEVELOPMENT_OFFLINE_ACTOR_ID
+        ) return
+        if (priorityUserOnboardingPolicy.snapshot().nativeEducationComplete) return
+        cancelPendingPriorityUserTrainingFeedback()
+        priorityUserOnboardingPolicy = PriorityUserOnboardingPolicy(
+            PriorityUserOnboardingSnapshot(
+                ageBand = PriorityUserAgeBand.VERIFIED_14_PLUS,
+                educationReviewed = true,
+                safePracticePlaceConfirmed = true,
+                completedPractices = PriorityUserPractice.entries.toSet(),
+                phonePostureAcknowledged = true,
+                practiceNecessityReviewed = true,
+                educationAccepted = true,
+                usageConditionsAcknowledged = true,
+                appUsageReviewed = true,
+                appUsageAccepted = true,
+                hazardResponseConfirmed = true,
+            ),
+        )
     }
 
     private fun advanceEmailStagesWithRestoredDeviceCheck(): Boolean {
@@ -40185,6 +40274,9 @@ generation != cameraFallbackGeneration
             ).stoppedFeatures
 
     private companion object {
+        const val DEVELOPMENT_OFFLINE_ACTOR_ID = "actor_deadbeefdeadbeefdeadbeefdeadbeef"
+        const val DEVELOPMENT_OFFLINE_EMAIL = "test0905@example.com"
+        const val DEVELOPMENT_OFFLINE_PASSWORD = "walksafe1234!"
         const val ROUTE_START_LOCATION_TIMEOUT_MS = 15_000L
         /** 마지막 컨트롤 아래 확보할 여백. 화면 밀도에 맞춰 px 로 환산한다. */
         /** 팀원 UI/UX 디자인 토큰. */

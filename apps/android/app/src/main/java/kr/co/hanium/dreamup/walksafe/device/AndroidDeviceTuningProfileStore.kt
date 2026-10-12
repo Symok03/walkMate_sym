@@ -151,7 +151,7 @@ class AndroidDeviceTuningProfileStore internal constructor(
         private val commitStates = WeakHashMap<SharedPreferences, CommitState>()
         // Keep this contract aligned with build dependencies and inference/preprocessing/tracking changes.
         const val RUNTIME_CONTRACT_VERSION =
-            "device-calibration-walkmate21-20260912-v2;litert=1.4.0;gpu=1.4.0;arcore=1.54.0;opencv=4.13.0"
+            "device-calibration-walkmate21-yolo26n-person-aux-20261010-v4;litert=1.4.0;gpu=1.4.0;arcore=1.54.0;opencv=4.13.0"
         const val INPUT_CONTRACT_VERSION = "fused-yuv-rgb-letterbox-float32-768-v1"
 
         /** Use the base asset config, never a candidate's runtime override. The loader verifies the

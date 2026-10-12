@@ -100,8 +100,8 @@ class RuntimeCalibrationFixtures internal constructor(private val readAsset: (St
 
     companion object {
         const val ASSET_ROOT = "runtime-calibration"
-        const val VERSION = "walksafe-runtime-calibration-walkmate21-v2"
-        const val MANIFEST_SHA256 = "2bb2e1dd5573f10114911ecf9fad7019a4d670179fafef917f01769249caadac"
+        const val VERSION = "walksafe-runtime-calibration-walkmate21-yolo26n-v3"
+        const val MANIFEST_SHA256 = "7990912737f06709a9f44160e845cd70a767cb658f6314ebad7cddb7432e0534"
         private const val BLACK_ARGB = -16777216
         private val IMAGE_PATH = Regex("images/[0-9]{12}\\.jpg")
         private val HASH = Regex("[0-9a-f]{64}")

@@ -361,7 +361,7 @@ class AndroidRuntimeCalibrationRunner(
         val options = unified.runtime.copy(delegate = candidate.backend.delegate,
             numThreads = candidate.numThreads, fallbackToCpu = false)
         val onlyUnified = config.copy(unifiedWalksafe = unified.copy(runtime = options),
-            fallbackModelKey = null, customTactile = null, cocoGeneral = null)
+            fallbackModelKey = null, customTactile = null, cocoGeneral = null, personAuxiliary = null)
         val load = TfliteAndroidFrameDetector.createWithStatus(appContext, onlyUnified,
             preprocessingStrategy = preprocessingStrategy)
         synchronized(monitor) { candidateLoad = load }

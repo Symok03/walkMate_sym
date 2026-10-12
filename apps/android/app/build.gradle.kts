@@ -32,6 +32,10 @@ val configuredGatewayOrigin = providers.gradleProperty("WALKSAFE_GATEWAY_ORIGIN"
 val verifiedReleaseGatewayOrigin = normalizedHttpsOriginOrNull(configuredGatewayOrigin)
 val developmentReportQueue = providers.gradleProperty("developmentReportQueue").orNull == "true"
 val developmentQuickStart = providers.gradleProperty("developmentQuickStart").orNull == "true"
+val developmentOfflineLogin =
+    providers.gradleProperty("developmentOfflineLogin").orNull == "true"
+val developmentOnboardingBypass =
+    providers.gradleProperty("developmentOnboardingBypass").orNull == "true"
 val developmentQuickStartEmail = if (developmentQuickStart) {
     providers.gradleProperty("developmentQuickStartEmail").orNull ?: "test0905@example.com"
 } else ""
@@ -295,6 +299,8 @@ android {
             )
             buildConfigField("boolean", "WALKSAFE_DEBUG_GUIDANCE_START_BYPASS", "$debugGuidanceStartBypass")
             buildConfigField("boolean", "DEVELOPMENT_QUICK_START", "$developmentQuickStart")
+            buildConfigField("boolean", "DEVELOPMENT_OFFLINE_LOGIN", "$developmentOfflineLogin")
+            buildConfigField("boolean", "DEVELOPMENT_ONBOARDING_BYPASS", "$developmentOnboardingBypass")
             buildConfigField("String", "DEVELOPMENT_QUICK_START_EMAIL", buildConfigString(developmentQuickStartEmail))
             buildConfigField("String", "DEVELOPMENT_QUICK_START_PASSWORD", buildConfigString(developmentQuickStartPassword))
         }
@@ -306,6 +312,8 @@ android {
             buildConfigField("boolean", "WALKSAFE_POST_LOGIN_DEVICE_CHECK_REQUIRED", "true")
             buildConfigField("boolean", "WALKSAFE_DEBUG_GUIDANCE_START_BYPASS", "false")
             buildConfigField("boolean", "DEVELOPMENT_QUICK_START", "false")
+            buildConfigField("boolean", "DEVELOPMENT_OFFLINE_LOGIN", "false")
+            buildConfigField("boolean", "DEVELOPMENT_ONBOARDING_BYPASS", "false")
             buildConfigField("String", "DEVELOPMENT_QUICK_START_EMAIL", "\"\"")
             buildConfigField("String", "DEVELOPMENT_QUICK_START_PASSWORD", "\"\"")
             isMinifyEnabled = false
